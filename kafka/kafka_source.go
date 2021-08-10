@@ -2,10 +2,11 @@ package kafka
 
 import (
 	"time"
+    "os"
 
 	"github.com/Shopify/sarama"
-	"github.com/wvanbergen/kafka/consumergroup"
-	"github.com/wvanbergen/kazoo-go"
+	"github.com/go-dmux/kafka/kazoo-go"
+	"github.com/go-dmux/kafka/consumer-group"
 )
 
 //KafkaSourceHook to track messages coming out of the source in order
@@ -41,6 +42,8 @@ type KafkaConf struct {
 	ForceRestart      bool   `json:"force_restart"`
 	ReadNewest        bool   `json:"read_newest"`
 	KafkaVersion      int    `json:"kafka_version_major"`
+	SASLEnabled       bool   `json:"sasl_enabled"`
+	SASLUsername      string `json:"username"`
 }
 
 //GetKafkaSource method is used to get instance of KafkaSource.
@@ -77,6 +80,13 @@ func (k *KafkaSource) Generate(out chan<- interface{}) {
 	if kconf.ForceRestart && kconf.ReadNewest {
 		config.Offsets.Initial = sarama.OffsetNewest
 	}
+
+	if kconf.SASLEnabled {
+    		//sarama config plain by default
+    		config.Net.SASL.User = kconf.SASLUsername
+    		config.Net.SASL.Password = os.Getenv("KAFKA_CLIENT_USER_PASSWORD")
+    		config.Net.SASL.Enable = true
+    	}
 
 	config.Offsets.ProcessingTimeout = 10 * time.Second
 
