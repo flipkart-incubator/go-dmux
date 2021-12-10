@@ -3,7 +3,6 @@ package kafka
 import (
 	"time"
     "os"
-    "log"
 
 	"github.com/Shopify/sarama"
 	"github.com/go-dmux/kafka/kazoo-go"
@@ -82,15 +81,10 @@ func (k *KafkaSource) Generate(out chan<- interface{}) {
 		config.Offsets.Initial = sarama.OffsetNewest
 	}
 
-    log.Println("now checking if sasl enabed or not ")
-
 	if kconf.SASLEnabled {
-	        log.Println("sasl is enabled")
     		//sarama config plain by default
     		config.Net.SASL.User = kconf.SASLUsername
-    		log.Println("usernname is ", config.Net.SASL.User)
     		config.Net.SASL.Password = os.Getenv("KAFKA_CLIENT_USER_PASSWORD")
-    		log.Println("password is ", config.Net.SASL.Password)
     		config.Net.SASL.Enable = true
     	}
 
