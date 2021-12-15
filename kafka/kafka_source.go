@@ -85,7 +85,7 @@ func (k *KafkaSource) Generate(out chan<- interface{}) {
 	if kconf.SASLEnabled {
     		//sarama config plain by default
     		config.Net.SASL.User = kconf.SASLUsername
-    		config.Net.SASL.Password = os.Getenv(SASLPasswordKey)
+    		config.Net.SASL.Password = os.Getenv(kconf.SASLPasswordKey)
     		config.Net.SASL.Enable = true
     	}
 
