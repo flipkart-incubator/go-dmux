@@ -44,6 +44,7 @@ type KafkaConf struct {
 	KafkaVersion      int    `json:"kafka_version_major"`
 	SASLEnabled       bool   `json:"sasl_enabled"`
 	SASLUsername      string `json:"username"`
+	SASLPasswordKey   string `json:"passwordKey"`
 }
 
 //GetKafkaSource method is used to get instance of KafkaSource.
@@ -84,7 +85,7 @@ func (k *KafkaSource) Generate(out chan<- interface{}) {
 	if kconf.SASLEnabled {
     		//sarama config plain by default
     		config.Net.SASL.User = kconf.SASLUsername
-    		config.Net.SASL.Password = os.Getenv("KAFKA_CLIENT_USER_PASSWORD")
+    		config.Net.SASL.Password = os.Getenv(SASLPasswordKey)
     		config.Net.SASL.Enable = true
     	}
 
