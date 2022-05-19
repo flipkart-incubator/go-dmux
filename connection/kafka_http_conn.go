@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"log"
+	"os"
 	"strconv"
 	"strings"
 
@@ -160,6 +161,10 @@ func (h *KafkaOffsetHook) PostHTTPCall(msg interface{}, success bool) {
 
 //GetKafkaHook is a global function that returns instance of KafkaOffsetHook
 func GetKafkaHook(offsetTracker source.OffsetTracker, enableDebugLog bool) *KafkaOffsetHook {
+	if enableDebugLog {
+		// enable sarama logs if booted with debug logs
+		sarama.Logger = log.New(os.Stdout, "[Sarama] ", log.LstdFlags)
+	}
 	return &KafkaOffsetHook{offsetTracker, enableDebugLog}
 }
 
