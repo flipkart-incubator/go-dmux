@@ -3,6 +3,7 @@ package connection
 import (
 	"encoding/json"
 	"log"
+	"os"
 	"strconv"
 	"strings"
 
@@ -39,6 +40,11 @@ func (c *KafkaFoxtrotConn) getConfiguration() *KafkaFoxtrotConnConfig {
 func (c *KafkaFoxtrotConn) Run() {
 	conf := c.getConfiguration()
 	log.Println("starting kafka_foxtrot with conf", conf)
+	if c.EnableDebugLog {
+		// enable sarama logs if booted with debug logs
+		log.Println("enabling sarama logs")
+		sarama.Logger = log.New(os.Stdout, "[Sarama] ", log.LstdFlags)
+	}
 	kafkaMsgFactory := getKafkaFoxtrotFactory()
 	src := source.GetKafkaSource(conf.Source, kafkaMsgFactory)
 	offsetTracker := source.GetKafkaOffsetTracker(conf.PendingAcks, src)

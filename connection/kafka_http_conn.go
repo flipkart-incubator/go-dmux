@@ -42,6 +42,11 @@ func (c *KafkaHTTPConn) getConfiguration() *KafkaHTTPConnConfig {
 func (c *KafkaHTTPConn) Run() {
 	conf := c.getConfiguration()
 	fmt.Println("starting go-dmux with conf", conf)
+	if c.EnableDebugLog {
+		// enable sarama logs if booted with debug logs
+		log.Println("enabling sarama logs")
+		sarama.Logger = log.New(os.Stdout, "[Sarama] ", log.LstdFlags)
+	}
 	kafkaMsgFactory := getKafkaHTTPFactory()
 	src := source.GetKafkaSource(conf.Source, kafkaMsgFactory)
 	offsetTracker := source.GetKafkaOffsetTracker(conf.PendingAcks, src)
@@ -161,10 +166,6 @@ func (h *KafkaOffsetHook) PostHTTPCall(msg interface{}, success bool) {
 
 //GetKafkaHook is a global function that returns instance of KafkaOffsetHook
 func GetKafkaHook(offsetTracker source.OffsetTracker, enableDebugLog bool) *KafkaOffsetHook {
-	if enableDebugLog {
-		// enable sarama logs if booted with debug logs
-		sarama.Logger = log.New(os.Stdout, "[Sarama] ", log.LstdFlags)
-	}
 	return &KafkaOffsetHook{offsetTracker, enableDebugLog}
 }
 
