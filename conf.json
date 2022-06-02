@@ -20,6 +20,7 @@
           "read_newest": true
         },
         "pending_acks": 1000000,
+        "lag_threshold" : 10,
         "sink": {
           "endpoint": "http://localhost:8888/1.0/api/event",
           "timeout": "10s",

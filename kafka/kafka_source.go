@@ -2,6 +2,7 @@ package kafka
 
 import (
 	"github.com/go-dmux/metrics"
+	"log"
 	"os"
 	"time"
 
@@ -69,7 +70,7 @@ func (k *KafkaSource) RegisterHook(hook KafkaSourceHook) {
 
 //Generate is Source method implementation, which connect to Kafka and pushes
 //KafkaMessage into the channel
-func (k *KafkaSource) Generate(out chan<- interface{}, sourceCh chan<- metrics.SourceOffset, partitionCh chan<-metrics.PartitionInfo) {
+func (k *KafkaSource) Generate(out chan<- interface{}, sourceCh chan<- metrics.SourceOffset, partitionCh chan<-metrics.PartitionInfo, lagTh int64) {
 
 	kconf := k.conf
 	//config
@@ -106,15 +107,34 @@ func (k *KafkaSource) Generate(out chan<- interface{}, sourceCh chan<- metrics.S
 	}
 
 	k.consumer = consumer
-	for message := range k.consumer.Messages() {
-		//TODO handle Create failure
-		kafkaMsg := k.factory.Create(message)
+	metrics.LagTh[kafkaTopics[0]] = lagTh
+	metrics.ThrottleChs[kafkaTopics[0]] = make(chan bool)
 
-		if k.hook != nil {
-			//TODO handle PreHook failure
-			k.hook.Pre(kafkaMsg, sourceCh)
+	doThrottle := false
+	for {
+		select {
+		case signal := <-metrics.ThrottleChs[kconf.Topic]:
+			//update the bool value
+			doThrottle = signal
+		default:
+			//Read events only if the throttle is false
+			if !doThrottle {
+				select {
+				case message := <-k.consumer.Messages():
+					//TODO handle Create failure
+					kafkaMsg := k.factory.Create(message)
+
+					if k.hook != nil {
+						//TODO handle PreHook failure
+						k.hook.Pre(kafkaMsg, sourceCh)
+					}
+					log.Println("Sending message", kafkaMsg.GetRawMsg().Offset)
+					out <- kafkaMsg
+				default:
+					continue
+				}
+			}
 		}
-		out <- kafkaMsg
 	}
 }
 

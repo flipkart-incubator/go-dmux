@@ -7,11 +7,6 @@ type registry struct {
 	PartitionCh chan PartitionInfo
 }
 
-type (
-	SinkOffset OffsetInfo
-	SourceOffset OffsetInfo
-)
-
 type OffsetInfo struct {
 	Topic string
 	Partition int32
@@ -24,16 +19,36 @@ type PartitionInfo struct {
 	Topic string
 }
 
+type LagDetail struct{
+	lag int64
+	partition int32
+}
+
+type (
+	SinkOffset OffsetInfo
+	SourceOffset OffsetInfo
+)
+
 //Provider interface that implements metric registry types
 type Provider interface {
 	Init()
 	Ingest(interface{})
 }
 
-var Registry registry
+var (
+	Registry registry
+	MetricPort int
+	//ThrottleChs for sending signals to source for throttling
+	ThrottleChs map[string]chan bool
+	//LagTh is the upper limit for lag post which source would be throttled
+	LagTh map[string]int64
+)
 
 //Init creates a registry and initializes the metrics based on the registry type and implementation and returns the created registry
 func Init() registry{
+	LagTh = make(map[string]int64)
+	ThrottleChs = make(map[string]chan bool)
+
 	pm := PrometheusMetrics{}
 
 	reg := registry{provider: &pm, SourceCh: make(chan SourceOffset, 1), SinkCh: make(chan SinkOffset, 1), PartitionCh: make(chan PartitionInfo)}

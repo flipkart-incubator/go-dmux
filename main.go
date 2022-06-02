@@ -26,6 +26,8 @@ func main() {
 		FilePath: path,
 	}
 	conf := dconf.GetDmuxConf()
+
+	//update metric port
 	metrics.MetricPort = conf.MetricPort
 	dmuxLogging := new(logging.DMuxLogging)
 	dmuxLogging.Start(conf.Logging)
