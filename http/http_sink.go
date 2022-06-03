@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/go-dmux/metrics"
 	"io"
 	"io/ioutil"
 	"log"
@@ -37,7 +36,7 @@ type HTTPSinkConf struct {
 //HTTPSinkHook is added for Clien to attach pre and post porcessing logic
 type HTTPSinkHook interface {
 	PreHTTPCall(msg interface{})
-	PostHTTPCall(msg interface{}, sucess bool, sinkCh chan<- metrics.SinkOffset)
+	PostHTTPCall(msg interface{}, sucess bool)
 }
 
 func getHTTPClientTransport(size int, conf HTTPSinkConf) http.RoundTripper {
@@ -114,7 +113,7 @@ func (h *HTTPSink) Clone() core.Sink {
 }
 
 //BatchConsume is implementation of Sink interface Consume.
-func (h *HTTPSink) BatchConsume(msgs []interface{}, version int, sinkCh chan<- metrics.SinkOffset) {
+func (h *HTTPSink) BatchConsume(msgs []interface{}, version int) {
 	// fmt.Println(msgs)
 	batchHelper := msgs[0].(HTTPMsg) // empty refrence to help call static methods
 	// data := msg.(HTTPMsg)
@@ -134,7 +133,7 @@ func (h *HTTPSink) BatchConsume(msgs []interface{}, version int, sinkCh chan<- m
 
 	for _, msg := range msgs {
 		//retry Post till you succede infinitely
-		h.retryPost(msg, status, url, sinkCh)
+		h.retryPost(msg, status, url)
 	}
 
 }
@@ -142,7 +141,7 @@ func (h *HTTPSink) BatchConsume(msgs []interface{}, version int, sinkCh chan<- m
 //Consume is implementation for Single message Consumption.
 //This infinitely retries pre and post hooks, but finetly retries HTTPCall
 //for status. status == true is determined by responseCode 2xx
-func (h *HTTPSink) Consume(msg interface{}, sinkCh chan<- metrics.SinkOffset) {
+func (h *HTTPSink) Consume(msg interface{}) {
 
 	data := msg.(HTTPMsg)
 	url := data.GetURL(h.conf.Endpoint)
@@ -156,7 +155,7 @@ func (h *HTTPSink) Consume(msg interface{}, sinkCh chan<- metrics.SinkOffset) {
 	status := h.retryExecute(h.conf.Method, url, headers, payload, responseCodeEvaluation)
 
 	//retry Post till you succede infinitely
-	h.retryPost(msg, status, url, sinkCh)
+	h.retryPost(msg, status, url)
 
 }
 
@@ -172,9 +171,9 @@ func (h *HTTPSink) retryPre(msg interface{}, url string) {
 }
 
 func (h *HTTPSink) retryPost(msg interface{}, state bool,
-	url string, sinkCh chan<- metrics.SinkOffset) {
+	url string) {
 	for {
-		status := h.post(h.hook, msg, state, url, sinkCh)
+		status := h.post(h.hook, msg, state, url)
 		if status {
 			break
 		}
@@ -218,7 +217,7 @@ func (h *HTTPSink) pre(hook HTTPSinkHook, msg interface{}, url string) bool {
 	return true
 }
 
-func (h *HTTPSink) post(hook HTTPSinkHook, msg interface{}, status bool, url string, sinkCh chan<- metrics.SinkOffset) bool {
+func (h *HTTPSink) post(hook HTTPSinkHook, msg interface{}, status bool, url string) bool {
 	// PostPorcessing
 	defer func() {
 		if r := recover(); r != nil {
@@ -227,7 +226,7 @@ func (h *HTTPSink) post(hook HTTPSinkHook, msg interface{}, status bool, url str
 	}()
 
 	if hook != nil {
-		hook.PostHTTPCall(msg, status, sinkCh)
+		hook.PostHTTPCall(msg, status)
 	}
 	return true
 }

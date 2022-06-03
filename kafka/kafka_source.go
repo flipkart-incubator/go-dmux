@@ -14,7 +14,7 @@ import (
 //KafkaSourceHook to track messages coming out of the source in order
 type KafkaSourceHook interface {
 	//Pre called before passing the message to DMux
-	Pre(k KafkaMsg, sourceCh chan<- metrics.SourceOffset)
+	Pre(k KafkaMsg)
 }
 type KafkaMsgFactory interface {
 	//Create call to wrap consumer message inside KafkaMsg
@@ -71,7 +71,7 @@ func (k *KafkaSource) RegisterHook(hook KafkaSourceHook) {
 
 //Generate is Source method implementation, which connect to Kafka and pushes
 //KafkaMessage into the channel
-func (k *KafkaSource) Generate(out chan<- interface{}, sourceCh chan<- metrics.SourceOffset, partitionCh chan<-metrics.PartitionInfo) {
+func (k *KafkaSource) Generate(out chan<- interface{}) {
 
 	kconf := k.conf
 	//config
@@ -102,7 +102,7 @@ func (k *KafkaSource) Generate(out chan<- interface{}, sourceCh chan<- metrics.S
 	kafkaTopics := []string{kconf.Topic}
 
 	// create consumer
-	consumer, err := consumergroup.JoinConsumerGroup(kconf.ConsumerGroupName, kafkaTopics, zookeeperNodes, config, partitionCh)
+	consumer, err := consumergroup.JoinConsumerGroup(kconf.ConsumerGroupName, kafkaTopics, zookeeperNodes, config)
 	if err != nil {
 		panic(err)
 	}
@@ -132,7 +132,7 @@ func (k *KafkaSource) Generate(out chan<- interface{}, sourceCh chan<- metrics.S
 
 					if k.hook != nil {
 						//TODO handle PreHook failure
-						k.hook.Pre(kafkaMsg, sourceCh)
+						k.hook.Pre(kafkaMsg)
 					}
 					log.Println("Sending message", kafkaMsg.GetRawMsg().Offset)
 					out <- kafkaMsg

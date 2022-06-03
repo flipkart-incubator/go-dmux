@@ -2,7 +2,6 @@ package core
 
 import (
 	"fmt"
-	"github.com/go-dmux/metrics"
 	"sync"
 	"time"
 )
@@ -62,10 +61,10 @@ type Sink interface {
 	// Consume method gets The interface.
 	//TODO currently this method does not return error, need to solve for error
 	// handling
-	Consume(msg interface{}, sinkCh chan<- metrics.SinkOffset)
+	Consume(msg interface{})
 
 	//BatchConsume method is invoked in batch_size is configured
-	BatchConsume(msg []interface{}, version int, sinkCh chan<- metrics.SinkOffset)
+	BatchConsume(msg []interface{}, version int)
 }
 
 //Source is interface that implements input Source to the Dmux
@@ -73,7 +72,7 @@ type Source interface {
 	//Generate method takes output channel to which it writes data. The
 	//implementation can write to to this using multiple goroutines
 	//This method is not expected to return, its run in a separate goroutine
-	Generate(out chan<- interface{}, sourceCh chan<- metrics.SourceOffset, partitionCh chan<- metrics.PartitionInfo)
+	Generate(out chan<- interface{})
 	//Method used to trigger GracefulStop of Source
 	Stop()
 }
@@ -191,12 +190,12 @@ func getStopMsg() ControlMsg {
 }
 
 func (d *Dmux) run(source Source, sink Sink) {
-	ch, wg := setup(d.size, d.sinkQSize, d.batchSize, sink, d.version, metrics.Registry.SinkCh)
-	in := make(chan interface{}, d.sourceQSize)
 
+	ch, wg := setup(d.size, d.sinkQSize, d.batchSize, sink, d.version)
+	in := make(chan interface{}, d.sourceQSize)
 	//start source
 	//TODO handle panic recovery if in channel is closed for shutdown
-	go source.Generate(in, metrics.Registry.SourceCh, metrics.Registry.PartitionCh)
+	go source.Generate(in)
 
 	for {
 		select {
@@ -209,7 +208,7 @@ func (d *Dmux) run(source Source, sink Sink) {
 				fmt.Println("processing resize")
 				shutdown(ch, wg)
 				resizeMeta := ctrl.meta.(ResizeMeta)
-				ch, wg = setup(resizeMeta.newSize, d.sinkQSize, d.batchSize, sink, d.version, metrics.Registry.SinkCh)
+				ch, wg = setup(resizeMeta.newSize, d.sinkQSize, d.batchSize, sink, d.version)
 				d.response <- ResponseMsg{ctrl.signal, Sucess}
 			} else if ctrl.signal == Stop {
 				fmt.Println("processing stop")
@@ -232,11 +231,11 @@ func shutdown(ch []chan interface{}, wg *sync.WaitGroup) {
 	wg.Wait()
 }
 
-func setup(size, qsize, batchSize int, sink Sink, version int, sinkCh chan<- metrics.SinkOffset) ([]chan interface{}, *sync.WaitGroup) {
+func setup(size, qsize, batchSize int, sink Sink, version int) ([]chan interface{}, *sync.WaitGroup) {
 	if version == 1 && batchSize == 1 {
-		return simpleSetup(size, qsize, sink, sinkCh)
+		return simpleSetup(size, qsize, sink)
 	} else {
-		return batchSetup(size, qsize, batchSize, sink, version, sinkCh)
+		return batchSetup(size, qsize, batchSize, sink, version)
 	}
 }
 
@@ -252,7 +251,7 @@ func setup(size, qsize, batchSize int, sink Sink, version int, sinkCh chan<- met
 // BatchConsumer will update its batch array index from one entry each of respective channel index. (This provides
 // ability for consumer to consume in parallel) and then flush the batch.
 // Close of any channel in a BatchConsumer will stop the BatchConsumer.
-func batchSetup(sz, qsz, batchsz int, sink Sink, version int, sinkCh chan<- metrics.SinkOffset) ([]chan interface{}, *sync.WaitGroup) {
+func batchSetup(sz, qsz, batchsz int, sink Sink, version int) ([]chan interface{}, *sync.WaitGroup) {
 	size := sz * batchsz // create double nuber of channels
 
 	wg := new(sync.WaitGroup)
@@ -295,7 +294,7 @@ func batchSetup(sz, qsz, batchsz int, sink Sink, version int, sinkCh chan<- metr
 				}
 				// fmt.Println("flusing ", batch)
 				//flush batched message
-				sk.BatchConsume(batch, version, sinkCh)
+				sk.BatchConsume(batch, version)
 			}
 
 		}(i)
@@ -303,7 +302,7 @@ func batchSetup(sz, qsz, batchsz int, sink Sink, version int, sinkCh chan<- metr
 	return ch, wg
 }
 
-func simpleSetup(size, qsize int, sink Sink, sinkCh chan<- metrics.SinkOffset) ([]chan interface{}, *sync.WaitGroup) {
+func simpleSetup(size, qsize int, sink Sink) ([]chan interface{}, *sync.WaitGroup) {
 	wg := new(sync.WaitGroup)
 	wg.Add(size)
 	ch := make([]chan interface{}, size)
@@ -312,7 +311,7 @@ func simpleSetup(size, qsize int, sink Sink, sinkCh chan<- metrics.SinkOffset) (
 		go func(index int) {
 			sk := sink.Clone()
 			for msg := range ch[index] {
-				sk.Consume(msg, sinkCh)
+				sk.Consume(msg)
 			}
 			wg.Done()
 		}(i)

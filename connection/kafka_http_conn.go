@@ -127,10 +127,10 @@ type KafkaOffsetHook struct {
 //Pre is invoked - before KafaSource pushes message to DMux. This implementation
 //invokes OffsetTracker TrackMe method here, to ensure the Message to track is
 //queued before its execution
-func (h *KafkaOffsetHook) Pre(data source.KafkaMsg, sourceCh chan<- metrics.SourceOffset) {
+func (h *KafkaOffsetHook) Pre(data source.KafkaMsg) {
 	// fmt.Println(h.enableDebugLog)
 	// msg := data.(*KafkaMessage)
-	h.offsetTracker.TrackMe(data, sourceCh)
+	h.offsetTracker.TrackMe(data)
 	if h.enableDebugLog {
 		msg := data.(sink.HTTPMsg)
 		log.Printf("%s after kafka source", msg.GetDebugPath())
@@ -148,13 +148,13 @@ func (h *KafkaOffsetHook) PreHTTPCall(msg interface{}) {
 //PostHTTPCall is invoked - after HttpSink execution. This implementation calls
 //KafkaMessage MarkDone method on the data argument of Post, to mark this
 //message and sucessfuly processed.
-func (h *KafkaOffsetHook) PostHTTPCall(msg interface{}, success bool, sinkCh chan<- metrics.SinkOffset) {
+func (h *KafkaOffsetHook) PostHTTPCall(msg interface{}, success bool) {
 	data := msg.(source.KafkaMsg)
 	if success {
 		data.MarkDone()
 		rawMsg := data.GetRawMsg()
 		//Create a sinkOffset and send it for ingestion through sink channel
-		sinkCh <- metrics.SinkOffset{Topic: rawMsg.Topic, Partition: rawMsg.Partition, Offset: rawMsg.Offset}
+		metrics.Registry.SinkCh <- metrics.SinkOffset{Topic: rawMsg.Topic, Partition: rawMsg.Partition, Offset: rawMsg.Offset}
 	}
 	if h.enableDebugLog {
 		val := msg.(sink.HTTPMsg)

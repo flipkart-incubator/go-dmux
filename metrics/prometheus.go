@@ -139,7 +139,6 @@ func (p *PrometheusMetrics) throttleSrc(topic string) {
 func (info *SourceOffset) push(p *PrometheusMetrics){
 	//Push the latest source offset for the corresponding topic and partition
 	p.sourceOffMetric.WithLabelValues(info.Topic, strconv.Itoa(int(info.Partition))).Set(float64(info.Offset))
-
 	info.updateLag(p)
 }
 
@@ -203,4 +202,3 @@ func (info *SinkOffset) updateLag(p *PrometheusMetrics) {
 		p.lagOffMetric.WithLabelValues(info.Topic, strconv.Itoa(int(info.Partition))).Set(float64(lag))
 	}
 }
-
