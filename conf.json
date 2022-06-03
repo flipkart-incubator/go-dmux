@@ -7,8 +7,8 @@
       "connectionType": "kafka_http",
       "connection": {
         "dmux": {
-          "size": 250,
-          "distributor_type": "Hash",
+          "size": 5,
+          "distributor_type": "RoundRobin",
           "batch_size": 1
         },
         "source": {
@@ -17,10 +17,10 @@
           "topic": "sample-topic",
           "kafka_version_major": 2,
           "force_restart": true,
-          "read_newest": true
+          "read_newest": true,
+          "lag_threshold" : 5
         },
         "pending_acks": 1000000,
-        "lag_threshold" : 10,
         "sink": {
           "endpoint": "http://localhost:8888/1.0/api/event",
           "timeout": "10s",

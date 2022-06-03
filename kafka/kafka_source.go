@@ -47,6 +47,7 @@ type KafkaConf struct {
 	SASLEnabled       bool   `json:"sasl_enabled"`
 	SASLUsername      string `json:"username"`
 	SASLPasswordKey   string `json:"passwordKey"`
+	LagThreshold      int64	 `json:"lag_threshold"`
 }
 
 //GetKafkaSource method is used to get instance of KafkaSource.
@@ -70,7 +71,7 @@ func (k *KafkaSource) RegisterHook(hook KafkaSourceHook) {
 
 //Generate is Source method implementation, which connect to Kafka and pushes
 //KafkaMessage into the channel
-func (k *KafkaSource) Generate(out chan<- interface{}, sourceCh chan<- metrics.SourceOffset, partitionCh chan<-metrics.PartitionInfo, lagTh int64) {
+func (k *KafkaSource) Generate(out chan<- interface{}, sourceCh chan<- metrics.SourceOffset, partitionCh chan<-metrics.PartitionInfo) {
 
 	kconf := k.conf
 	//config
@@ -107,7 +108,7 @@ func (k *KafkaSource) Generate(out chan<- interface{}, sourceCh chan<- metrics.S
 	}
 
 	k.consumer = consumer
-	metrics.LagTh[kafkaTopics[0]] = lagTh
+	metrics.LagTh[kafkaTopics[0]] = kconf.LagThreshold
 	metrics.ThrottleChs[kafkaTopics[0]] = make(chan bool)
 
 	doThrottle := false
@@ -116,6 +117,11 @@ func (k *KafkaSource) Generate(out chan<- interface{}, sourceCh chan<- metrics.S
 		case signal := <-metrics.ThrottleChs[kconf.Topic]:
 			//update the bool value
 			doThrottle = signal
+			if doThrottle{
+				log.Println("Throttling the source")
+			} else{
+				log.Println("Resuming the source")
+			}
 		default:
 			//Read events only if the throttle is false
 			if !doThrottle {

@@ -31,7 +31,6 @@ type DmuxConf struct {
 	DistributorType DistributorType `json:"distributor_type"`
 	BatchSize       int             `json:"batch_size"`
 	Version         int             `json:"version"`
-	lagTh			int64			`json:"lag_threshold"`
 }
 
 // ControlMsg is the struct passed to Dmux control Channel to enable it
@@ -74,7 +73,7 @@ type Source interface {
 	//Generate method takes output channel to which it writes data. The
 	//implementation can write to to this using multiple goroutines
 	//This method is not expected to return, its run in a separate goroutine
-	Generate(out chan<- interface{}, sourceCh chan<- metrics.SourceOffset, partitionCh chan<- metrics.PartitionInfo, lagTh int64)
+	Generate(out chan<- interface{}, sourceCh chan<- metrics.SourceOffset, partitionCh chan<- metrics.PartitionInfo)
 	//Method used to trigger GracefulStop of Source
 	Stop()
 }
@@ -100,14 +99,12 @@ type Dmux struct {
 	err                    chan error
 	distribute             Distributor
 	version                int
-	lagTh				   int64
 }
 
 const defaultSourceQSize int = 1
 const defaultSinkQSize int = 100
 const defaultBatchSize int = 1
 const defaultVersion int = 1
-const defaultLagTh uint64 = 10
 
 //GetDmux is public method used to Get instance of a Dmux struct
 func GetDmux(conf DmuxConf, d Distributor) *Dmux {
@@ -135,7 +132,7 @@ func GetDmux(conf DmuxConf, d Distributor) *Dmux {
 		version = conf.Version
 	}
 
-	output := &Dmux{conf.Size, batchSize, sourceQSize, sinkQSize, control, response, err, d, version, conf.lagTh}
+	output := &Dmux{conf.Size, batchSize, sourceQSize, sinkQSize, control, response, err, d, version}
 	return output
 }
 
@@ -199,7 +196,7 @@ func (d *Dmux) run(source Source, sink Sink) {
 
 	//start source
 	//TODO handle panic recovery if in channel is closed for shutdown
-	go source.Generate(in, metrics.Registry.SourceCh, metrics.Registry.PartitionCh, d.lagTh)
+	go source.Generate(in, metrics.Registry.SourceCh, metrics.Registry.PartitionCh)
 
 	for {
 		select {
