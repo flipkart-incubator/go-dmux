@@ -26,7 +26,6 @@ func main() {
 		FilePath: path,
 	}
 	conf := dconf.GetDmuxConf()
-	metrics.Init(conf.MetricPort)
 
 	dmuxLogging := new(logging.DMuxLogging)
 	dmuxLogging.Start(conf.Logging)
@@ -35,6 +34,9 @@ func main() {
 	go c.start()
 
 	log.Printf("config: %v", conf)
+
+	//start showing metrics at the endpoint
+	metrics.Start(conf.MetricPort)
 
 	for _, item := range conf.DMuxItems {
 		go func(connType ConnectionType, connConf interface{}, logDebug bool) {
