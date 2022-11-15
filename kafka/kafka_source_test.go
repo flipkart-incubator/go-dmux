@@ -3,6 +3,7 @@ package kafka
 import (
 	"fmt"
 	"hash/fnv"
+	"math"
 	"testing"
 
 	"github.com/Shopify/sarama"
@@ -15,14 +16,15 @@ import (
 type ConsoleSink struct {
 }
 
-func (c *ConsoleSink) Consume(msg interface{}) {
+func (c *ConsoleSink) Consume(msg interface{}, retries int) error {
 	data := msg.(KafkaMsg)
 	fmt.Println(string(data.GetRawMsg().Key))
+	return nil
 }
 
 func (c *ConsoleSink) BatchConsume(msgs []interface{}, version int) {
 	for _, msg := range msgs {
-		c.Consume(msg)
+		c.Consume(msg, math.MaxInt32)
 	}
 }
 

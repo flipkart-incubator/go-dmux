@@ -39,9 +39,9 @@ func main() {
 	metrics.Start(conf.MetricPort)
 
 	for _, item := range conf.DMuxItems {
-		go func(connType ConnectionType, connConf interface{}, logDebug bool) {
-			connType.Start(connConf, logDebug)
-		}(item.ConnType, item.Connection, dmuxLogging.EnableDebug)
+		go func(connType ConnectionType, connConf interface{}, logDebug bool, sidelineEnabled bool) {
+			connType.Start(connConf, logDebug, sidelineEnabled)
+		}(item.ConnType, item.Connection, dmuxLogging.EnableDebug, item.SidelineEnabled)
 	}
 
 	//main thread halts. TODO make changes to listen to kill and reboot

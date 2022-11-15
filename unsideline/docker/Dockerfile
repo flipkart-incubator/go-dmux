@@ -9,9 +9,11 @@ RUN apt-get update \
 
 COPY . .
 
+WORKDIR unsideline/
+
 RUN git config --global http.sslverify false
 
-RUN go build -o bin/go-dmux
+RUN go build -o bin/unsideline
 
 FROM golang:1.12-stretch as deploy
 
@@ -30,14 +32,15 @@ RUN apt-get clean \
 
 WORKDIR /app
 
-COPY --from=build /app/bin/go-dmux .
+COPY --from=build /app/unsideline/bin/unsideline .
 
 RUN groupadd -g ${GID} ${group} && \
     useradd -ms /bin/bash --create-home -g ${GID} -u ${UID} ${user} ; \
-    mkdir -p /var/log/go-dmux ; \
-    chown -R ${user}:${group} /var/log/go-dmux ; \
-    chmod 777 go-dmux
+    mkdir -p /var/log/unsideline ; \
+    chown -R ${user}:${group} /var/log/unsideline ; \
+    chmod 777 unsideline; \
+    chmod +x unsideline
 
 USER ${user}
 
-ENTRYPOINT ["./go-dmux"]
+ENTRYPOINT ["./unsideline", "/app/config/unsideline-config.json"]

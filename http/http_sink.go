@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"math"
 	"net"
 	"net/http"
 	"strconv"
@@ -129,7 +130,7 @@ func (h *HTTPSink) BatchConsume(msgs []interface{}, version int) {
 	}
 
 	//retry Execute till you succede based on retry config
-	status := h.retryExecute(h.conf.Method, url, headers, payload, responseCodeEvaluation)
+	status, _ := h.retryExecute(h.conf.Method, url, headers, payload, responseCodeEvaluation, math.MaxInt32)
 
 	for _, msg := range msgs {
 		//retry Post till you succede infinitely
@@ -141,7 +142,7 @@ func (h *HTTPSink) BatchConsume(msgs []interface{}, version int) {
 //Consume is implementation for Single message Consumption.
 //This infinitely retries pre and post hooks, but finetly retries HTTPCall
 //for status. status == true is determined by responseCode 2xx
-func (h *HTTPSink) Consume(msg interface{}) {
+func (h *HTTPSink) Consume(msg interface{}, retries int) error {
 
 	data := msg.(HTTPMsg)
 	url := data.GetURL(h.conf.Endpoint)
@@ -152,11 +153,13 @@ func (h *HTTPSink) Consume(msg interface{}) {
 	h.retryPre(msg, url)
 
 	//retry Execute till you succede based on retry config
-	status := h.retryExecute(h.conf.Method, url, headers, payload, responseCodeEvaluation)
-
+	status, err := h.retryExecute(h.conf.Method, url, headers, payload, responseCodeEvaluation, retries)
+	if !status && err != nil {
+		return err
+	}
 	//retry Post till you succede infinitely
 	h.retryPost(msg, status, url)
-
+	return nil
 }
 
 func (h *HTTPSink) retryPre(msg interface{}, url string) {
@@ -184,17 +187,19 @@ func (h *HTTPSink) retryPost(msg interface{}, state bool,
 }
 
 func (h *HTTPSink) retryExecute(method, url string, headers map[string]string,
-	data []byte, respEval func(respCode int, nonRetriableHttpStatusCodes []int) (error, bool)) bool {
-
+	data []byte, respEval func(respCode int, nonRetriableHttpStatusCodes []int) (error, bool), retries int) (bool, error) {
+	var count = 0
 	for {
-
 		status, respCode := h.execute(method, url, headers, bytes.NewReader(data))
-
 		if status {
 			nonRetriableHttpStatusCodes := h.conf.NonRetriableHttpStatusCodes
 			err, outcome := respEval(respCode, nonRetriableHttpStatusCodes)
 			if err == nil {
-				return outcome
+				return outcome, nil
+			}
+			count = count + 1
+			if retries != math.MaxInt32 && count > retries {
+				return outcome, errors.New("exceeded retries")
 			}
 		}
 		log.Printf("retry in execute %s \t %s ", method, url)
