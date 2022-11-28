@@ -3,9 +3,9 @@ package offset_monitor
 import (
 	"context"
 	"github.com/Shopify/sarama"
-	"github.com/go-dmux/core"
-	consumergroup "github.com/go-dmux/kafka/consumer-group"
-	"github.com/go-dmux/metrics"
+	"github.com/flipkart-incubator/go-dmux/core"
+	consumergroup "github.com/flipkart-incubator/go-dmux/kafka/consumer-group"
+	"github.com/flipkart-incubator/go-dmux/metrics"
 	"strconv"
 	"time"
 )

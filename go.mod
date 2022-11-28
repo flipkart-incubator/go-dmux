@@ -1,4 +1,4 @@
-module github.com/go-dmux
+module github.com/flipkart-incubator/go-dmux
 
 go 1.12.4
 

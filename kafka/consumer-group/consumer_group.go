@@ -3,13 +3,13 @@ package consumergroup
 import (
 	"errors"
 	"fmt"
-	"github.com/go-dmux/metrics"
+	"github.com/Shopify/sarama"
+	"github.com/flipkart-incubator/go-dmux/metrics"
 	"strconv"
 	"sync"
 	"time"
 
-	"github.com/Shopify/sarama"
-	"github.com/go-dmux/kafka/kazoo-go"
+	"github.com/flipkart-incubator/go-dmux/kafka/kazoo-go"
 )
 
 var (

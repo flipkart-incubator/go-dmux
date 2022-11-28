@@ -1,11 +1,11 @@
 package main
 
 import (
-	"github.com/go-dmux/metrics"
+	"github.com/flipkart-incubator/go-dmux/metrics"
 	"log"
 	"os"
 
-	"github.com/go-dmux/logging"
+	"github.com/flipkart-incubator/go-dmux/logging"
 )
 
 //

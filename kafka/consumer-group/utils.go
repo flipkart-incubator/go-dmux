@@ -7,7 +7,7 @@ import (
 	"os"
 	"sort"
 
-    "github.com/go-dmux/kafka/kazoo-go"
+	"github.com/flipkart-incubator/go-dmux/kafka/kazoo-go"
 )
 
 func retrievePartitionLeaders(partitions kazoo.PartitionList) (partitionLeaders, error) {

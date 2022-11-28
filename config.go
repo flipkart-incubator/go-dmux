@@ -6,8 +6,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/go-dmux/connection"
-	"github.com/go-dmux/logging"
+	"github.com/flipkart-incubator/go-dmux/connection"
+	"github.com/flipkart-incubator/go-dmux/logging"
 )
 
 //ConnectionType based on this type of Connection and related forks happen
@@ -70,8 +70,8 @@ type DmuxConf struct {
 	Name      string     `json:"name"`
 	DMuxItems []DmuxItem `json:"dmuxItems"`
 	// DMuxMap    map[string]KafkaHTTPConnConfig `json:"dmuxMap"`
-	MetricPort int	     `json:"metric_port"`
-	Logging logging.LogConf `json:"logging"`
+	MetricPort int             `json:"metric_port"`
+	Logging    logging.LogConf `json:"logging"`
 }
 
 //DmuxItem struct defines name and type of connection

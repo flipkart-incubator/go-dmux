@@ -2,7 +2,7 @@
 
 
 docker run --rm  -i -v ~/go:/go golang:1.12-stretch bash -s <<EOF
-cd  src/github.com/go-dmux
+cd  src/github.com/flipkart-incubator/go-dmux
 export GOPROXY=direct
 export GO111MODULE=on
 export GOSUMDB=off

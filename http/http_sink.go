@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"time"
 
-	core "github.com/go-dmux/core"
+	core "github.com/flipkart-incubator/go-dmux/core"
 )
 
 //HTTPSink is Sink implementation which writes to HttpEndpoint
