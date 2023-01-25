@@ -1,4 +1,4 @@
-FROM golang:1.12-stretch as build
+FROM golang:1.18-bullseye as build
 
 WORKDIR /app
 
