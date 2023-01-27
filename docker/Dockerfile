@@ -11,9 +11,12 @@ COPY . .
 
 RUN git config --global http.sslverify false
 
+RUN go mod tidy
+RUN go mod vendor
+
 RUN go build -o bin/go-dmux
 
-FROM golang:1.12-stretch as deploy
+FROM golang:1.18-bullseye as deploy
 
 ENV user "go-dmux"
 ENV group "go-dmux"
