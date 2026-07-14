@@ -71,7 +71,7 @@ func newAuthnTokenProvider(conf PulsarConf) (*authnTokenProvider, error) {
 	if err != nil {
 		return nil, fmt.Errorf("machine_identity: invalid auth_issuer_url: %w", err)
 	}
-	if issuer.Scheme != "https" && issuer.Scheme != "http" {
+	if issuer.Scheme != "https" {
 		return nil, fmt.Errorf("machine_identity: auth_issuer_url must be http(s)")
 	}
 	if issuer.Host == "" {
