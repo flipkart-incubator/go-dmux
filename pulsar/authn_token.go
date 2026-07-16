@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -167,8 +166,6 @@ func (p *authnTokenProvider) fetchToken() (string, time.Duration, error) {
 	}
 
 	ttl := time.Duration(parsed.ExpiresIn) * time.Second
-	log.Printf("machine_identity: fetched new token from %s (ttl ~%s)\n",
-		p.tokenEndpoint, ttl)
 	return parsed.AccessToken, ttl, nil
 }
 
