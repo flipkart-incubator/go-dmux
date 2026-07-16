@@ -118,7 +118,8 @@ func TestFetchToken_Success(t *testing.T) {
 			t.Errorf("expected form content-type, got %q", ct)
 		}
 		if err := r.ParseForm(); err != nil {
-			t.Fatalf("failed to parse form: %v", err)
+			t.Errorf("failed to parse form: %v", err)
+			return
 		}
 		if got := r.PostForm.Get("grant_type"); got != testGrantType {
 			t.Errorf("grant_type = %q, want %q", got, testGrantType)
