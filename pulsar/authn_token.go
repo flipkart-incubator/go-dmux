@@ -14,31 +14,25 @@ import (
 )
 
 const (
-	// authnTokenExchangePath is the AuthN token-exchange endpoint path. This is
-	// an AuthN protocol convention (not a deployment-specific value); the host
-	// is derived from the configured issuer URL.
-	authnTokenExchangePath = "/v3/oauth/token"
-	// tokenExchangeGrantType is the standard RFC 8693 token-exchange grant.
-	tokenExchangeGrantType = "urn:ietf:params:oauth:grant-type:token-exchange"
-	// defaultSubjectTokenPath is the well-known mount path for the projected
-	// Kubernetes identity token injected by the AuthN webhook. Used only as a
-	// fallback when auth_subject_token_path is not supplied via config.
-	defaultSubjectTokenPath = "/var/run/secrets/wif/k8s-authn/token"
+	// defaultSubjectTokenField is the form field name used to carry the subject
+	// token when auth_subject_token_field is not supplied via config.
+	defaultSubjectTokenField = "subject_token"
 	// tokenRefreshSkew is how long before expiry we proactively refresh.
 	tokenRefreshSkew = 60 * time.Second
 	// authnHTTPTimeout bounds the token-exchange HTTP call.
 	authnHTTPTimeout = 10 * time.Second
 )
 
-// authnTokenProvider fetches and caches short-lived AuthN tokens using the
-// Machine Identity (token-exchange) flow. It implements no client secret: the
-// subject token is the pod's native identity token read from disk.
+// authnTokenProvider fetches and caches short-lived tokens using a
+// provider-agnostic token-exchange flow. It uses no client secret: the subject
+// token is the workload's native identity token read from disk, and the rest of
+// the request body is supplied verbatim from config (exchangeForm).
 type authnTokenProvider struct {
-	tokenEndpoint    string
-	clientID         string
-	targetClientID   string
-	subjectTokenPath string
-	httpClient       *http.Client
+	tokenEndpoint     string
+	exchangeForm      map[string]string
+	subjectTokenPath  string
+	subjectTokenField string
+	httpClient        *http.Client
 
 	mu          sync.Mutex
 	cachedToken string
@@ -54,49 +48,42 @@ type tokenExchangeResponse struct {
 }
 
 // newAuthnTokenProvider builds a provider from the source config. The token
-// endpoint host is derived from the configured issuer URL, so outbound calls
-// are restricted to that host (SSRF-safe); only https/http issuers are allowed.
+// endpoint is used verbatim from config; outbound requests go only to that URL.
+// Only https endpoints are allowed to avoid sending credentials in plaintext.
 func newAuthnTokenProvider(conf PulsarConf) (*authnTokenProvider, error) {
-	if conf.AuthClientId == "" {
-		return nil, fmt.Errorf("machine_identity: client_id is required")
-	}
-	if conf.AuthTargetClientId == "" {
-		return nil, fmt.Errorf("machine_identity: auth_target_client_id is required")
-	}
-	if conf.AuthIssuerURL == "" {
-		return nil, fmt.Errorf("machine_identity: auth_issuer_url is required")
+	if conf.AuthTokenEndpoint == "" {
+		return nil, fmt.Errorf("machine_identity: auth_token_endpoint is required")
 	}
 
-	issuer, err := url.Parse(conf.AuthIssuerURL)
+	endpoint, err := url.Parse(conf.AuthTokenEndpoint)
 	if err != nil {
-		return nil, fmt.Errorf("machine_identity: invalid auth_issuer_url: %w", err)
+		return nil, fmt.Errorf("machine_identity: invalid auth_token_endpoint: %w", err)
 	}
-	if issuer.Scheme != "https" {
-		return nil, fmt.Errorf("machine_identity: auth_issuer_url must be http(s)")
+	if endpoint.Scheme != "https" {
+		return nil, fmt.Errorf("machine_identity: auth_token_endpoint must be https")
 	}
-	if issuer.Host == "" {
-		return nil, fmt.Errorf("machine_identity: auth_issuer_url missing host")
+	if endpoint.Host == "" {
+		return nil, fmt.Errorf("machine_identity: auth_token_endpoint missing host")
 	}
 
-	// Derive the token endpoint from the issuer's scheme+host plus the AuthN
-	// standard path. This pins all outbound requests to the issuer host.
-	tokenEndpoint := (&url.URL{
-		Scheme: issuer.Scheme,
-		Host:   issuer.Host,
-		Path:   authnTokenExchangePath,
-	}).String()
+	if conf.AuthSubjectTokenPath == "" {
+		return nil, fmt.Errorf("machine_identity: auth_subject_token_path is required")
+	}
+	if len(conf.AuthExchangeForm) == 0 {
+		return nil, fmt.Errorf("machine_identity: auth_exchange_form is required")
+	}
 
-	subjectTokenPath := conf.AuthSubjectTokenPath
-	if subjectTokenPath == "" {
-		subjectTokenPath = defaultSubjectTokenPath
+	subjectTokenField := conf.AuthSubjectTokenField
+	if subjectTokenField == "" {
+		subjectTokenField = defaultSubjectTokenField
 	}
 
 	return &authnTokenProvider{
-		tokenEndpoint:    tokenEndpoint,
-		clientID:         conf.AuthClientId,
-		targetClientID:   conf.AuthTargetClientId,
-		subjectTokenPath: subjectTokenPath,
-		httpClient:       &http.Client{Timeout: authnHTTPTimeout},
+		tokenEndpoint:     conf.AuthTokenEndpoint,
+		exchangeForm:      conf.AuthExchangeForm,
+		subjectTokenPath:  conf.AuthSubjectTokenPath,
+		subjectTokenField: subjectTokenField,
+		httpClient:        &http.Client{Timeout: authnHTTPTimeout},
 	}, nil
 }
 
@@ -135,11 +122,13 @@ func (p *authnTokenProvider) fetchToken() (string, time.Duration, error) {
 		return "", 0, err
 	}
 
+	// Build the request body from the config-supplied form, then inject the
+	// runtime subject token under the configured field name.
 	form := url.Values{}
-	form.Set("grant_type", tokenExchangeGrantType)
-	form.Set("client_id", p.clientID)
-	form.Set("target_client_id", p.targetClientID)
-	form.Set("subject_token", subjectToken)
+	for k, v := range p.exchangeForm {
+		form.Set(k, v)
+	}
+	form.Set(p.subjectTokenField, subjectToken)
 
 	ctx, cancel := context.WithTimeout(context.Background(), authnHTTPTimeout)
 	defer cancel()
@@ -178,8 +167,8 @@ func (p *authnTokenProvider) fetchToken() (string, time.Duration, error) {
 	}
 
 	ttl := time.Duration(parsed.ExpiresIn) * time.Second
-	log.Printf("machine_identity: fetched new AuthN token for client %s (ttl ~%s)\n",
-		p.clientID, ttl)
+	log.Printf("machine_identity: fetched new token from %s (ttl ~%s)\n",
+		p.tokenEndpoint, ttl)
 	return parsed.AccessToken, ttl, nil
 }
 

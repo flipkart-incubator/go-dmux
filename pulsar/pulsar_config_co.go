@@ -20,13 +20,24 @@ type PulsarConf struct {
 
 	// AuthMode selects how the client authenticates to Pulsar/Viesti.
 	// Empty or "client_credentials" => legacy secret-based OAuth2 flow.
-	// "machine_identity" => secret-less AuthN token-exchange flow.
+	// "machine_identity" => secret-less token-exchange flow.
 	AuthMode string `json:"auth_mode"`
-	// AuthTargetClientId is the target client id used in the AuthN
-	// token-exchange request (machine_identity mode only).
-	AuthTargetClientId string `json:"auth_target_client_id"`
-	// AuthSubjectTokenPath is the path to the native (K8s) identity token
-	// that is exchanged for an AuthN token (machine_identity mode only).
-	// Deployment-specific; supplied via tenant config, not hardcoded here.
+
+	// The fields below configure the machine_identity (token-exchange) flow.
+	// They are provider-agnostic: the request body is fully described by
+	// AuthExchangeForm, so no provider-specific field names are hardcoded.
+
+	// AuthTokenEndpoint is the full HTTPS URL of the token-exchange endpoint
+	AuthTokenEndpoint string `json:"auth_token_endpoint"`
+	// AuthSubjectTokenPath is the path to the native (K8s) identity token that
+	// is exchanged for a downstream token. Deployment-specific; required in
+	// machine_identity mode (no default).
 	AuthSubjectTokenPath string `json:"auth_subject_token_path"`
+	// AuthSubjectTokenField is the form field name under which the subject token
+	// is sent. Defaults to "subject_token" when unset.
+	AuthSubjectTokenField string `json:"auth_subject_token_field"`
+	// AuthExchangeForm is the set of static form fields POSTed to the token
+	// endpoint (e.g. grant_type, client_id, target_client_id or audience). The
+	// subject token is injected at runtime under AuthSubjectTokenField.
+	AuthExchangeForm map[string]string `json:"auth_exchange_form"`
 }

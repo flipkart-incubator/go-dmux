@@ -22,45 +22,60 @@ func writeSubjectToken(t *testing.T, contents string) string {
 	return path
 }
 
+// testGrantType is the token-exchange grant used in test form bodies.
+const testGrantType = "urn:ietf:params:oauth:grant-type:token-exchange"
+
+// testTokenPath is an arbitrary token-endpoint path used by the test servers.
+const testTokenPath = "/v3/oauth/token"
+
 // newTestProvider builds a provider pointed at the given endpoint and subject
 // token path, bypassing newAuthnTokenProvider so individual fields can be set.
 func newTestProvider(endpoint, subjectTokenPath string) *authnTokenProvider {
 	return &authnTokenProvider{
-		tokenEndpoint:    endpoint,
-		clientID:         "test-client",
-		targetClientID:   "test-target",
-		subjectTokenPath: subjectTokenPath,
-		httpClient:       &http.Client{Timeout: authnHTTPTimeout},
+		tokenEndpoint: endpoint,
+		exchangeForm: map[string]string{
+			"grant_type":       testGrantType,
+			"client_id":        "test-client",
+			"target_client_id": "test-target",
+		},
+		subjectTokenPath:  subjectTokenPath,
+		subjectTokenField: defaultSubjectTokenField,
+		httpClient:        &http.Client{Timeout: authnHTTPTimeout},
+	}
+}
+
+func baseMachineIdentityConf() PulsarConf {
+	return PulsarConf{
+		AuthMode:             AuthModeMachineIdentity,
+		AuthTokenEndpoint:    "https://authn.example.com/v3/oauth/token",
+		AuthSubjectTokenPath: "/some/path/token",
+		AuthExchangeForm: map[string]string{
+			"grant_type":       testGrantType,
+			"client_id":        "cid",
+			"target_client_id": "tid",
+		},
 	}
 }
 
 func TestNewAuthnTokenProvider_Validation(t *testing.T) {
-	base := PulsarConf{
-		AuthMode:             AuthModeMachineIdentity,
-		AuthClientId:         "cid",
-		AuthTargetClientId:   "tid",
-		AuthIssuerURL:        "https://authn.example.com/v3/fk",
-		AuthSubjectTokenPath: "/some/path/token",
-	}
-
 	cases := []struct {
 		name    string
 		mutate  func(c *PulsarConf)
 		wantErr bool
 	}{
 		{"valid config", func(c *PulsarConf) {}, false},
-		{"missing client_id", func(c *PulsarConf) { c.AuthClientId = "" }, true},
-		{"missing target_client_id", func(c *PulsarConf) { c.AuthTargetClientId = "" }, true},
-		{"missing issuer", func(c *PulsarConf) { c.AuthIssuerURL = "" }, true},
-		{"non-https issuer", func(c *PulsarConf) { c.AuthIssuerURL = "http://insecure.example.com" }, true},
-		{"malformed issuer", func(c *PulsarConf) { c.AuthIssuerURL = "://bad" }, true},
-		{"issuer without host", func(c *PulsarConf) { c.AuthIssuerURL = "https://" }, true},
-		{"empty subject path falls back to default", func(c *PulsarConf) { c.AuthSubjectTokenPath = "" }, false},
+		{"missing token endpoint", func(c *PulsarConf) { c.AuthTokenEndpoint = "" }, true},
+		{"non-https endpoint", func(c *PulsarConf) { c.AuthTokenEndpoint = "http://insecure.example.com/token" }, true},
+		{"malformed endpoint", func(c *PulsarConf) { c.AuthTokenEndpoint = "://bad" }, true},
+		{"endpoint without host", func(c *PulsarConf) { c.AuthTokenEndpoint = "https://" }, true},
+		{"missing subject path", func(c *PulsarConf) { c.AuthSubjectTokenPath = "" }, true},
+		{"empty exchange form", func(c *PulsarConf) { c.AuthExchangeForm = nil }, true},
+		{"custom subject token field", func(c *PulsarConf) { c.AuthSubjectTokenField = "assertion" }, false},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			conf := base
+			conf := baseMachineIdentityConf()
 			tc.mutate(&conf)
 			p, err := newAuthnTokenProvider(conf)
 			if tc.wantErr {
@@ -72,12 +87,17 @@ func TestNewAuthnTokenProvider_Validation(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if conf.AuthSubjectTokenPath == "" && p.subjectTokenPath != defaultSubjectTokenPath {
-				t.Errorf("expected fallback subject path %q, got %q", defaultSubjectTokenPath, p.subjectTokenPath)
+			// Endpoint is used verbatim, no derivation.
+			if p.tokenEndpoint != conf.AuthTokenEndpoint {
+				t.Errorf("expected token endpoint %q, got %q", conf.AuthTokenEndpoint, p.tokenEndpoint)
 			}
-			wantEndpoint := "https://authn.example.com" + authnTokenExchangePath
-			if conf.AuthIssuerURL == base.AuthIssuerURL && p.tokenEndpoint != wantEndpoint {
-				t.Errorf("expected token endpoint %q, got %q", wantEndpoint, p.tokenEndpoint)
+			// Subject token field defaults when unset, else uses the configured value.
+			wantField := conf.AuthSubjectTokenField
+			if wantField == "" {
+				wantField = defaultSubjectTokenField
+			}
+			if p.subjectTokenField != wantField {
+				t.Errorf("expected subject token field %q, got %q", wantField, p.subjectTokenField)
 			}
 		})
 	}
@@ -91,8 +111,8 @@ func TestFetchToken_Success(t *testing.T) {
 		if r.Method != http.MethodPost {
 			t.Errorf("expected POST, got %s", r.Method)
 		}
-		if r.URL.Path != authnTokenExchangePath {
-			t.Errorf("expected path %s, got %s", authnTokenExchangePath, r.URL.Path)
+		if r.URL.Path != testTokenPath {
+			t.Errorf("expected path %s, got %s", testTokenPath, r.URL.Path)
 		}
 		if ct := r.Header.Get("Content-Type"); ct != "application/x-www-form-urlencoded" {
 			t.Errorf("expected form content-type, got %q", ct)
@@ -100,8 +120,8 @@ func TestFetchToken_Success(t *testing.T) {
 		if err := r.ParseForm(); err != nil {
 			t.Fatalf("failed to parse form: %v", err)
 		}
-		if got := r.PostForm.Get("grant_type"); got != tokenExchangeGrantType {
-			t.Errorf("grant_type = %q, want %q", got, tokenExchangeGrantType)
+		if got := r.PostForm.Get("grant_type"); got != testGrantType {
+			t.Errorf("grant_type = %q, want %q", got, testGrantType)
 		}
 		if got := r.PostForm.Get("client_id"); got != "test-client" {
 			t.Errorf("client_id = %q, want test-client", got)
@@ -117,7 +137,7 @@ func TestFetchToken_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p := newTestProvider(srv.URL+authnTokenExchangePath, subjPath)
+	p := newTestProvider(srv.URL+testTokenPath, subjPath)
 	token, ttl, err := p.fetchToken()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -185,7 +205,7 @@ func TestFetchToken_ErrorPaths(t *testing.T) {
 			srv := httptest.NewServer(tc.handler)
 			defer srv.Close()
 
-			p := newTestProvider(srv.URL+authnTokenExchangePath, tc.subjPath)
+			p := newTestProvider(srv.URL+testTokenPath, tc.subjPath)
 			_, _, err := p.fetchToken()
 			if err == nil {
 				t.Fatalf("expected error containing %q, got nil", tc.wantErrSub)
@@ -210,7 +230,7 @@ func TestGetToken_Caching(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p := newTestProvider(srv.URL+authnTokenExchangePath, subjPath)
+	p := newTestProvider(srv.URL+testTokenPath, subjPath)
 
 	if _, err := p.getToken(); err != nil {
 		t.Fatalf("first getToken failed: %v", err)
@@ -245,7 +265,7 @@ func TestGetToken_RefreshSkew(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p := newTestProvider(srv.URL+authnTokenExchangePath, subjPath)
+	p := newTestProvider(srv.URL+testTokenPath, subjPath)
 
 	// Seed a token whose expiry falls inside the refresh skew window, so it is
 	// treated as stale even though it has not strictly expired.
@@ -268,12 +288,7 @@ func TestGetToken_RefreshSkew(t *testing.T) {
 
 func TestBuildAuthentication_ModeSelection(t *testing.T) {
 	t.Run("machine_identity valid", func(t *testing.T) {
-		src := GetPulsarSource(PulsarConf{
-			AuthMode:           AuthModeMachineIdentity,
-			AuthClientId:       "cid",
-			AuthTargetClientId: "tid",
-			AuthIssuerURL:      "https://authn.example.com/v3/fk",
-		})
+		src := GetPulsarSource(baseMachineIdentityConf())
 		auth, err := src.buildAuthentication()
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -284,11 +299,9 @@ func TestBuildAuthentication_ModeSelection(t *testing.T) {
 	})
 
 	t.Run("machine_identity invalid config", func(t *testing.T) {
-		src := GetPulsarSource(PulsarConf{
-			AuthMode:      AuthModeMachineIdentity,
-			AuthClientId:  "cid",
-			AuthIssuerURL: "http://insecure.example.com",
-		})
+		conf := baseMachineIdentityConf()
+		conf.AuthTokenEndpoint = "http://insecure.example.com/token"
+		src := GetPulsarSource(conf)
 		if _, err := src.buildAuthentication(); err == nil {
 			t.Error("expected error for invalid machine_identity config, got nil")
 		}
@@ -297,10 +310,10 @@ func TestBuildAuthentication_ModeSelection(t *testing.T) {
 	t.Run("legacy empty auth mode", func(t *testing.T) {
 		// Empty auth mode must take the legacy client-credentials branch. That
 		// branch never returns an error (unlike machine_identity, which would
-		// error here on the missing target_client_id), so a nil error confirms
-		// the correct branch was selected. We do not assert on the returned
-		// Authentication value because the SDK's NewAuthenticationOAuth2 may
-		// return nil for placeholder credentials.
+		// error here on the invalid config), so a nil error confirms the correct
+		// branch was selected. We do not assert on the returned Authentication
+		// value because the SDK's NewAuthenticationOAuth2 may return nil for
+		// placeholder credentials.
 		src := GetPulsarSource(PulsarConf{
 			AuthClientId:     "cid",
 			AuthClientSecret: "secret",
