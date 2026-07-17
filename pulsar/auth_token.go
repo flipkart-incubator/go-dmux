@@ -18,15 +18,15 @@ const (
 	defaultSubjectTokenField = "subject_token"
 	// tokenRefreshSkew is how long before expiry we proactively refresh.
 	tokenRefreshSkew = 60 * time.Second
-	// authnHTTPTimeout bounds the token-exchange HTTP call.
-	authnHTTPTimeout = 10 * time.Second
+	// authHTTPTimeout bounds the token-exchange HTTP call.
+	authHTTPTimeout = 10 * time.Second
 )
 
-// authnTokenProvider fetches and caches short-lived tokens using a
+// authTokenProvider fetches and caches short-lived tokens using a
 // provider-agnostic token-exchange flow. It uses no client secret: the subject
 // token is the workload's native identity token read from disk, and the rest of
 // the request body is supplied verbatim from config (exchangeForm).
-type authnTokenProvider struct {
+type authTokenProvider struct {
 	tokenEndpoint     string
 	exchangeForm      map[string]string
 	subjectTokenPath  string
@@ -38,7 +38,7 @@ type authnTokenProvider struct {
 	expiresAt   time.Time
 }
 
-// tokenExchangeResponse models the subset of the AuthN token-exchange response
+// tokenExchangeResponse models the subset of the token-exchange response
 // we consume.
 type tokenExchangeResponse struct {
 	AccessToken string `json:"access_token"`
@@ -46,10 +46,10 @@ type tokenExchangeResponse struct {
 	TokenType   string `json:"token_type"`
 }
 
-// newAuthnTokenProvider builds a provider from the source config. The token
+// newAuthTokenProvider builds a provider from the source config. The token
 // endpoint is used verbatim from config; outbound requests go only to that URL.
 // Only https endpoints are allowed to avoid sending credentials in plaintext.
-func newAuthnTokenProvider(conf PulsarConf) (*authnTokenProvider, error) {
+func newAuthTokenProvider(conf PulsarConf) (*authTokenProvider, error) {
 	if conf.AuthTokenEndpoint == "" {
 		return nil, fmt.Errorf("machine_identity: auth_token_endpoint is required")
 	}
@@ -77,25 +77,25 @@ func newAuthnTokenProvider(conf PulsarConf) (*authnTokenProvider, error) {
 		subjectTokenField = defaultSubjectTokenField
 	}
 
-	return &authnTokenProvider{
+	return &authTokenProvider{
 		tokenEndpoint:     conf.AuthTokenEndpoint,
 		exchangeForm:      conf.AuthExchangeForm,
 		subjectTokenPath:  conf.AuthSubjectTokenPath,
 		subjectTokenField: subjectTokenField,
-		httpClient:        &http.Client{Timeout: authnHTTPTimeout},
+		httpClient:        &http.Client{Timeout: authHTTPTimeout},
 	}, nil
 }
 
 // tokenSupplier returns a function compatible with
 // pulsar.NewAuthenticationTokenFromSupplier. It serves a cached token and
 // refreshes it shortly before expiry.
-func (p *authnTokenProvider) tokenSupplier() func() (string, error) {
+func (p *authTokenProvider) tokenSupplier() func() (string, error) {
 	return func() (string, error) {
 		return p.getToken()
 	}
 }
 
-func (p *authnTokenProvider) getToken() (string, error) {
+func (p *authTokenProvider) getToken() (string, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -112,10 +112,10 @@ func (p *authnTokenProvider) getToken() (string, error) {
 	return token, nil
 }
 
-// fetchToken reads the native identity token and exchanges it for an AuthN
+// fetchToken reads the native identity token and exchanges it for a downstream
 // token. The subject token is re-read on every fetch because it rotates
-// (~hourly) independently of the AuthN token.
-func (p *authnTokenProvider) fetchToken() (string, time.Duration, error) {
+// (~hourly) independently of the exchanged token.
+func (p *authTokenProvider) fetchToken() (string, time.Duration, error) {
 	subjectToken, err := p.readSubjectToken()
 	if err != nil {
 		return "", 0, err
@@ -129,7 +129,7 @@ func (p *authnTokenProvider) fetchToken() (string, time.Duration, error) {
 	}
 	form.Set(p.subjectTokenField, subjectToken)
 
-	ctx, cancel := context.WithTimeout(context.Background(), authnHTTPTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), authHTTPTimeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.tokenEndpoint,
@@ -169,7 +169,7 @@ func (p *authnTokenProvider) fetchToken() (string, time.Duration, error) {
 	return parsed.AccessToken, ttl, nil
 }
 
-func (p *authnTokenProvider) readSubjectToken() (string, error) {
+func (p *authTokenProvider) readSubjectToken() (string, error) {
 	b, err := ioutil.ReadFile(p.subjectTokenPath)
 	if err != nil {
 		return "", fmt.Errorf("machine_identity: read subject token at %s: %w",

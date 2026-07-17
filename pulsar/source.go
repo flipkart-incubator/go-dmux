@@ -51,7 +51,7 @@ func GetPulsarSource(conf PulsarConf) *PulsarSource {
 // legacy OAuth2 client-credentials flow for backward compatibility.
 func (p *PulsarSource) buildAuthentication() (pulsar.Authentication, error) {
 	if p.conf.AuthMode == AuthModeMachineIdentity {
-		provider, err := newAuthnTokenProvider(p.conf)
+		provider, err := newAuthTokenProvider(p.conf)
 		if err != nil {
 			return nil, err
 		}

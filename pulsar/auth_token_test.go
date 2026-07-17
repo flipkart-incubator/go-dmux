@@ -29,9 +29,9 @@ const testGrantType = "urn:ietf:params:oauth:grant-type:token-exchange"
 const testTokenPath = "/v3/oauth/token"
 
 // newTestProvider builds a provider pointed at the given endpoint and subject
-// token path, bypassing newAuthnTokenProvider so individual fields can be set.
-func newTestProvider(endpoint, subjectTokenPath string) *authnTokenProvider {
-	return &authnTokenProvider{
+// token path, bypassing newAuthTokenProvider so individual fields can be set.
+func newTestProvider(endpoint, subjectTokenPath string) *authTokenProvider {
+	return &authTokenProvider{
 		tokenEndpoint: endpoint,
 		exchangeForm: map[string]string{
 			"grant_type":       testGrantType,
@@ -40,14 +40,14 @@ func newTestProvider(endpoint, subjectTokenPath string) *authnTokenProvider {
 		},
 		subjectTokenPath:  subjectTokenPath,
 		subjectTokenField: defaultSubjectTokenField,
-		httpClient:        &http.Client{Timeout: authnHTTPTimeout},
+		httpClient:        &http.Client{Timeout: authHTTPTimeout},
 	}
 }
 
 func baseMachineIdentityConf() PulsarConf {
 	return PulsarConf{
 		AuthMode:             AuthModeMachineIdentity,
-		AuthTokenEndpoint:    "https://authn.example.com/v3/oauth/token",
+		AuthTokenEndpoint:    "https://auth.example.com/v3/oauth/token",
 		AuthSubjectTokenPath: "/some/path/token",
 		AuthExchangeForm: map[string]string{
 			"grant_type":       testGrantType,
@@ -57,7 +57,7 @@ func baseMachineIdentityConf() PulsarConf {
 	}
 }
 
-func TestNewAuthnTokenProvider_Validation(t *testing.T) {
+func TestNewAuthTokenProvider_Validation(t *testing.T) {
 	cases := []struct {
 		name    string
 		mutate  func(c *PulsarConf)
@@ -77,7 +77,7 @@ func TestNewAuthnTokenProvider_Validation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			conf := baseMachineIdentityConf()
 			tc.mutate(&conf)
-			p, err := newAuthnTokenProvider(conf)
+			p, err := newAuthTokenProvider(conf)
 			if tc.wantErr {
 				if err == nil {
 					t.Fatalf("expected error, got nil (provider=%v)", p)
@@ -318,7 +318,7 @@ func TestBuildAuthentication_ModeSelection(t *testing.T) {
 		src := GetPulsarSource(PulsarConf{
 			AuthClientId:     "cid",
 			AuthClientSecret: "secret",
-			AuthIssuerURL:    "https://authn.example.com/v3/fk",
+			AuthIssuerURL:    "https://auth.example.com/v3/fk",
 			AuthAudience:     "viesti-prod",
 		})
 		if _, err := src.buildAuthentication(); err != nil {
