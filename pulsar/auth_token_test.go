@@ -47,7 +47,7 @@ func newTestProvider(endpoint, subjectTokenPath string) *authTokenProvider {
 func baseMachineIdentityConf() PulsarConf {
 	return PulsarConf{
 		AuthMode:             AuthModeMachineIdentity,
-		AuthTokenEndpoint:    "https://auth.example.com/v3/oauth/token",
+		AuthIssuerURL:        "https://auth.example.com/v3/oauth/token",
 		AuthSubjectTokenPath: "/some/path/token",
 		AuthExchangeForm: map[string]string{
 			"grant_type":       testGrantType,
@@ -64,10 +64,10 @@ func TestNewAuthTokenProvider_Validation(t *testing.T) {
 		wantErr bool
 	}{
 		{"valid config", func(c *PulsarConf) {}, false},
-		{"missing token endpoint", func(c *PulsarConf) { c.AuthTokenEndpoint = "" }, true},
-		{"non-https endpoint", func(c *PulsarConf) { c.AuthTokenEndpoint = "http://insecure.example.com/token" }, true},
-		{"malformed endpoint", func(c *PulsarConf) { c.AuthTokenEndpoint = "://bad" }, true},
-		{"endpoint without host", func(c *PulsarConf) { c.AuthTokenEndpoint = "https://" }, true},
+		{"missing issuer url", func(c *PulsarConf) { c.AuthIssuerURL = "" }, true},
+		{"non-https issuer url", func(c *PulsarConf) { c.AuthIssuerURL = "http://insecure.example.com/token" }, true},
+		{"malformed issuer url", func(c *PulsarConf) { c.AuthIssuerURL = "://bad" }, true},
+		{"issuer url without host", func(c *PulsarConf) { c.AuthIssuerURL = "https://" }, true},
 		{"missing subject path", func(c *PulsarConf) { c.AuthSubjectTokenPath = "" }, true},
 		{"empty exchange form", func(c *PulsarConf) { c.AuthExchangeForm = nil }, true},
 		{"custom subject token field", func(c *PulsarConf) { c.AuthSubjectTokenField = "assertion" }, false},
@@ -87,11 +87,9 @@ func TestNewAuthTokenProvider_Validation(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			// Endpoint is used verbatim, no derivation.
-			if p.tokenEndpoint != conf.AuthTokenEndpoint {
-				t.Errorf("expected token endpoint %q, got %q", conf.AuthTokenEndpoint, p.tokenEndpoint)
+			if p.tokenEndpoint != conf.AuthIssuerURL {
+				t.Errorf("expected token endpoint %q, got %q", conf.AuthIssuerURL, p.tokenEndpoint)
 			}
-			// Subject token field defaults when unset, else uses the configured value.
 			wantField := conf.AuthSubjectTokenField
 			if wantField == "" {
 				wantField = defaultSubjectTokenField
@@ -221,7 +219,7 @@ func TestFetchToken_ErrorPaths(t *testing.T) {
 	}
 }
 
-func TestGetToken_Caching(t *testing.T) {
+func TestTokenSupplier_Caching(t *testing.T) {
 	subjPath := writeSubjectToken(t, "subject")
 	var hits int32
 
@@ -232,58 +230,16 @@ func TestGetToken_Caching(t *testing.T) {
 	defer srv.Close()
 
 	p := newTestProvider(srv.URL+testTokenPath, subjPath)
+	supplier := p.tokenSupplier()
 
-	if _, err := p.getToken(); err != nil {
-		t.Fatalf("first getToken failed: %v", err)
+	if _, err := supplier(); err != nil {
+		t.Fatalf("first supplier call failed: %v", err)
 	}
-	if _, err := p.getToken(); err != nil {
-		t.Fatalf("second getToken failed: %v", err)
+	if _, err := supplier(); err != nil {
+		t.Fatalf("second supplier call failed: %v", err)
 	}
 	if got := atomic.LoadInt32(&hits); got != 1 {
 		t.Errorf("expected 1 server hit (second served from cache), got %d", got)
-	}
-
-	// Force expiry so the next call must refresh.
-	p.mu.Lock()
-	p.expiresAt = time.Now().Add(-time.Minute)
-	p.mu.Unlock()
-
-	if _, err := p.getToken(); err != nil {
-		t.Fatalf("third getToken failed: %v", err)
-	}
-	if got := atomic.LoadInt32(&hits); got != 2 {
-		t.Errorf("expected 2 server hits after forced expiry, got %d", got)
-	}
-}
-
-func TestGetToken_RefreshSkew(t *testing.T) {
-	subjPath := writeSubjectToken(t, "subject")
-	var hits int32
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt32(&hits, 1)
-		w.Write([]byte(`{"access_token":"tok","expires_in":3600}`))
-	}))
-	defer srv.Close()
-
-	p := newTestProvider(srv.URL+testTokenPath, subjPath)
-
-	// Seed a token whose expiry falls inside the refresh skew window, so it is
-	// treated as stale even though it has not strictly expired.
-	p.mu.Lock()
-	p.cachedToken = "stale"
-	p.expiresAt = time.Now().Add(tokenRefreshSkew / 2)
-	p.mu.Unlock()
-
-	tok, err := p.getToken()
-	if err != nil {
-		t.Fatalf("getToken failed: %v", err)
-	}
-	if tok != "tok" {
-		t.Errorf("expected refreshed token %q, got %q", "tok", tok)
-	}
-	if got := atomic.LoadInt32(&hits); got != 1 {
-		t.Errorf("expected 1 refresh within skew window, got %d", got)
 	}
 }
 
@@ -301,7 +257,7 @@ func TestBuildAuthentication_ModeSelection(t *testing.T) {
 
 	t.Run("machine_identity invalid config", func(t *testing.T) {
 		conf := baseMachineIdentityConf()
-		conf.AuthTokenEndpoint = "http://insecure.example.com/token"
+		conf.AuthIssuerURL = "http://insecure.example.com/token"
 		src := GetPulsarSource(conf)
 		if _, err := src.buildAuthentication(); err == nil {
 			t.Error("expected error for invalid machine_identity config, got nil")

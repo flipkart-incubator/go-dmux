@@ -24,11 +24,10 @@ type PulsarConf struct {
 	AuthMode string `json:"auth_mode"`
 
 	// The fields below configure the machine_identity (token-exchange) flow.
-	// They are provider-agnostic: the request body is fully described by
-	// AuthExchangeForm, so no provider-specific field names are hardcoded.
+	// For machine_identity, AuthIssuerURL is the full HTTPS token-exchange
+	// endpoint. The request body is described by AuthExchangeForm; the subject
+	// token is injected at runtime under AuthSubjectTokenField.
 
-	// AuthTokenEndpoint is the full HTTPS URL of the token-exchange endpoint
-	AuthTokenEndpoint string `json:"auth_token_endpoint"`
 	// AuthSubjectTokenPath is the path to the native (K8s) identity token that
 	// is exchanged for a downstream token. Deployment-specific; required in
 	// machine_identity mode (no default).

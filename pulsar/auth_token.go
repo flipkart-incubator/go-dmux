@@ -8,34 +8,32 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
+
+	"golang.org/x/oauth2"
 )
 
 const (
 	// defaultSubjectTokenField is the form field name used to carry the subject
 	// token when auth_subject_token_field is not supplied via config.
 	defaultSubjectTokenField = "subject_token"
-	// tokenRefreshSkew is how long before expiry we proactively refresh.
+	// tokenRefreshSkew is how long before expiry ReuseTokenSourceWithExpiry
+	// proactively refreshes.
 	tokenRefreshSkew = 60 * time.Second
 	// authHTTPTimeout bounds the token-exchange HTTP call.
 	authHTTPTimeout = 10 * time.Second
 )
 
-// authTokenProvider fetches and caches short-lived tokens using a
-// provider-agnostic token-exchange flow. It uses no client secret: the subject
-// token is the workload's native identity token read from disk, and the rest of
-// the request body is supplied verbatim from config (exchangeForm).
+// authTokenProvider exchanges a native identity token for a downstream access
+// token using a provider-agnostic token-exchange flow. It implements
+// oauth2.TokenSource; caching is handled by oauth2.ReuseTokenSourceWithExpiry
+// in tokenSupplier.
 type authTokenProvider struct {
 	tokenEndpoint     string
 	exchangeForm      map[string]string
 	subjectTokenPath  string
 	subjectTokenField string
 	httpClient        *http.Client
-
-	mu          sync.Mutex
-	cachedToken string
-	expiresAt   time.Time
 }
 
 // tokenExchangeResponse models the subset of the token-exchange response
@@ -46,23 +44,23 @@ type tokenExchangeResponse struct {
 	TokenType   string `json:"token_type"`
 }
 
-// newAuthTokenProvider builds a provider from the source config. The token
-// endpoint is used verbatim from config; outbound requests go only to that URL.
+// newAuthTokenProvider builds a provider from the source config. For
+// machine_identity, auth_issuer_url is the full HTTPS token-exchange endpoint.
 // Only https endpoints are allowed to avoid sending credentials in plaintext.
 func newAuthTokenProvider(conf PulsarConf) (*authTokenProvider, error) {
-	if conf.AuthTokenEndpoint == "" {
-		return nil, fmt.Errorf("machine_identity: auth_token_endpoint is required")
+	if conf.AuthIssuerURL == "" {
+		return nil, fmt.Errorf("machine_identity: auth_issuer_url is required")
 	}
 
-	endpoint, err := url.Parse(conf.AuthTokenEndpoint)
+	endpoint, err := url.Parse(conf.AuthIssuerURL)
 	if err != nil {
-		return nil, fmt.Errorf("machine_identity: invalid auth_token_endpoint: %w", err)
+		return nil, fmt.Errorf("machine_identity: invalid auth_issuer_url: %w", err)
 	}
 	if endpoint.Scheme != "https" {
-		return nil, fmt.Errorf("machine_identity: auth_token_endpoint must be https")
+		return nil, fmt.Errorf("machine_identity: auth_issuer_url must be https")
 	}
 	if endpoint.Host == "" {
-		return nil, fmt.Errorf("machine_identity: auth_token_endpoint missing host")
+		return nil, fmt.Errorf("machine_identity: auth_issuer_url missing host")
 	}
 
 	if conf.AuthSubjectTokenPath == "" {
@@ -78,7 +76,7 @@ func newAuthTokenProvider(conf PulsarConf) (*authTokenProvider, error) {
 	}
 
 	return &authTokenProvider{
-		tokenEndpoint:     conf.AuthTokenEndpoint,
+		tokenEndpoint:     conf.AuthIssuerURL,
 		exchangeForm:      conf.AuthExchangeForm,
 		subjectTokenPath:  conf.AuthSubjectTokenPath,
 		subjectTokenField: subjectTokenField,
@@ -86,30 +84,31 @@ func newAuthTokenProvider(conf PulsarConf) (*authTokenProvider, error) {
 	}, nil
 }
 
-// tokenSupplier returns a function compatible with
-// pulsar.NewAuthenticationTokenFromSupplier. It serves a cached token and
-// refreshes it shortly before expiry.
-func (p *authTokenProvider) tokenSupplier() func() (string, error) {
-	return func() (string, error) {
-		return p.getToken()
+// Token implements oauth2.TokenSource. It performs a token exchange on every
+// call; callers should wrap this provider with oauth2.ReuseTokenSourceWithExpiry.
+func (p *authTokenProvider) Token() (*oauth2.Token, error) {
+	access, ttl, err := p.fetchToken()
+	if err != nil {
+		return nil, err
 	}
+	return &oauth2.Token{
+		AccessToken: access,
+		Expiry:      time.Now().Add(ttl),
+	}, nil
 }
 
-func (p *authTokenProvider) getToken() (string, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	if p.cachedToken != "" && time.Now().Before(p.expiresAt.Add(-tokenRefreshSkew)) {
-		return p.cachedToken, nil
+// tokenSupplier returns a function compatible with
+// pulsar.NewAuthenticationTokenFromSupplier. Caching and proactive refresh are
+// delegated to oauth2.ReuseTokenSourceWithExpiry.
+func (p *authTokenProvider) tokenSupplier() func() (string, error) {
+	cached := oauth2.ReuseTokenSourceWithExpiry(nil, p, tokenRefreshSkew)
+	return func() (string, error) {
+		tok, err := cached.Token()
+		if err != nil {
+			return "", err
+		}
+		return tok.AccessToken, nil
 	}
-
-	token, ttl, err := p.fetchToken()
-	if err != nil {
-		return "", err
-	}
-	p.cachedToken = token
-	p.expiresAt = time.Now().Add(ttl)
-	return token, nil
 }
 
 // fetchToken reads the native identity token and exchanges it for a downstream
