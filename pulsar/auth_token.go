@@ -17,8 +17,8 @@ const (
 	// defaultSubjectTokenField is the form field name used to carry the subject
 	// token when auth_subject_token_field is not supplied via config.
 	defaultSubjectTokenField = "subject_token"
-	// tokenRefreshSkew is how long before expiry ReuseTokenSourceWithExpiry
-	// proactively refreshes.
+	// tokenRefreshSkew is how long before the real expiry we mark tokens as
+	// expired, so the cached source refreshes proactively.
 	tokenRefreshSkew = 60 * time.Second
 	// authHTTPTimeout bounds the token-exchange HTTP call.
 	authHTTPTimeout = 10 * time.Second
@@ -26,8 +26,8 @@ const (
 
 // authTokenProvider exchanges a native identity token for a downstream access
 // token using a provider-agnostic token-exchange flow. It implements
-// oauth2.TokenSource; caching is handled by oauth2.ReuseTokenSourceWithExpiry
-// in tokenSupplier.
+// oauth2.TokenSource; caching is handled by oauth2.ReuseTokenSource in
+// tokenSupplier.
 type authTokenProvider struct {
 	tokenEndpoint     string
 	exchangeForm      map[string]string
@@ -85,11 +85,16 @@ func newAuthTokenProvider(conf PulsarConf) (*authTokenProvider, error) {
 }
 
 // Token implements oauth2.TokenSource. It performs a token exchange on every
-// call; callers should wrap this provider with oauth2.ReuseTokenSourceWithExpiry.
+// call; callers should wrap this provider with oauth2.ReuseTokenSource, which
+// caches until the token expires. We report Expiry tokenRefreshSkew earlier
+// than the real expiry so the cached source refreshes proactively.
 func (p *authTokenProvider) Token() (*oauth2.Token, error) {
 	access, ttl, err := p.fetchToken()
 	if err != nil {
 		return nil, err
+	}
+	if ttl > tokenRefreshSkew {
+		ttl -= tokenRefreshSkew
 	}
 	return &oauth2.Token{
 		AccessToken: access,
@@ -98,10 +103,11 @@ func (p *authTokenProvider) Token() (*oauth2.Token, error) {
 }
 
 // tokenSupplier returns a function compatible with
-// pulsar.NewAuthenticationTokenFromSupplier. Caching and proactive refresh are
-// delegated to oauth2.ReuseTokenSourceWithExpiry.
+// pulsar.NewAuthenticationTokenFromSupplier. Caching and refresh are delegated
+// to oauth2.ReuseTokenSource; the proactive refresh skew is baked into the
+// token Expiry in Token.
 func (p *authTokenProvider) tokenSupplier() func() (string, error) {
-	cached := oauth2.ReuseTokenSourceWithExpiry(nil, p, tokenRefreshSkew)
+	cached := oauth2.ReuseTokenSource(nil, p)
 	return func() (string, error) {
 		tok, err := cached.Token()
 		if err != nil {
