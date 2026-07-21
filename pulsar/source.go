@@ -45,10 +45,21 @@ func GetPulsarSource(conf PulsarConf) *PulsarSource {
 	return &PulsarSource{conf: conf}
 }
 
-// Generate is Source method implementation, which connects to Pulsar and pushes
-// PulsarMessage into the channel
-func (p *PulsarSource) Generate(out chan<- interface{}) {
-	// Prepare KeyFile
+// buildAuthentication constructs the Pulsar authentication provider based on
+// the configured auth mode. machine_identity uses a secret-less AuthN
+// token-exchange supplier; any other value (including empty) falls back to the
+// legacy OAuth2 client-credentials flow for backward compatibility.
+func (p *PulsarSource) buildAuthentication() (pulsar.Authentication, error) {
+	if p.conf.AuthMode == AuthModeMachineIdentity {
+		provider, err := newAuthTokenProvider(p.conf)
+		if err != nil {
+			return nil, err
+		}
+		log.Println("prepared pulsar auth via machine identity (token supplier)")
+		return pulsar.NewAuthenticationTokenFromSupplier(provider.tokenSupplier()), nil
+	}
+
+	// Legacy client-credentials flow (requires a client secret).
 	props := map[string]string{
 		"type":          "client_credentials",
 		"client_id":     p.conf.AuthClientId,
@@ -57,7 +68,6 @@ func (p *PulsarSource) Generate(out chan<- interface{}) {
 	}
 	privateKey, _ := json.Marshal(props)
 
-	// Build authentication
 	auth := pulsar.NewAuthenticationOAuth2(map[string]string{
 		"type":       "client_credentials",
 		"issuerUrl":  p.conf.AuthIssuerURL,
@@ -66,6 +76,16 @@ func (p *PulsarSource) Generate(out chan<- interface{}) {
 		"clientId":   p.conf.AuthClientId,
 	})
 	log.Println("prepared pulsar oauth2")
+	return auth, nil
+}
+
+// Generate is Source method implementation, which connects to Pulsar and pushes
+// PulsarMessage into the channel
+func (p *PulsarSource) Generate(out chan<- interface{}) {
+	auth, err := p.buildAuthentication()
+	if err != nil {
+		panic(err)
+	}
 
 	// Authenticate client
 	client, err := pulsar.NewClient(pulsar.ClientOptions{
