@@ -246,12 +246,23 @@ func (h *HTTPSink) retryExecute(method, url string, headers map[string]string,
 			nonRetriableHttpStatusCodes := h.conf.NonRetriableHttpStatusCodes
 			err, outcome := respEval(respCode, nonRetriableHttpStatusCodes)
 			if err == nil {
+				// Log successful responses (2xx) for debugging
+				if respCode >= 200 && respCode < 300 {
+					log.Printf("HTTP request succeeded with status code %d for %s %s", respCode, method, url)
+				}
 				return outcome, nil
+			}
+			// Log non-2xx response codes with more context
+			if respCode >= 300 {
+				log.Printf("HTTP request failed with status code %d for %s %s (retry attempt %d)", respCode, method, url, count+1)
 			}
 			count = count + 1
 			if core.Contains(sidelineResponseCodes, respCode) || (retries != 0 && retries != math.MaxInt32 && count > retries) {
 				return outcome, errors.New(core.SidelineMessage)
 			}
+		} else {
+			// Log HTTP request execution failures
+			log.Printf("HTTP request execution failed for %s %s", method, url)
 		}
 
 		// Determine the next delay
@@ -264,11 +275,11 @@ func (h *HTTPSink) retryExecute(method, url string, headers map[string]string,
 				log.Printf("backoff.Stop returned, using max interval %s", expBackoff.MaxInterval)
 				nextDelay = expBackoff.MaxInterval
 			}
-			log.Printf("retryExecute with backoff nextDelay %s \t %s \t %s \n", method, url, nextDelay)
+			log.Printf("retryExecuteee with backoff nextDelay %s \t %s \t %s \n", method, url, nextDelay)
 		} else {
 			// Use the configured fixed retry interval
 			nextDelay = h.conf.RetryInterval.Duration
-			log.Printf("retryExecute nextDelay %s \t %s \t %s \n", method, url, nextDelay)
+			log.Printf("retryExecuteee nextDelay %s \t %s \t %s \n", method, url, nextDelay)
 		}
 		time.Sleep(nextDelay)
 	}
