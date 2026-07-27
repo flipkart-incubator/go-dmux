@@ -2,6 +2,7 @@ package core
 
 import (
 	"hash/fnv"
+	"log"
 	"testing"
 )
 

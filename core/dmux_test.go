@@ -2,6 +2,7 @@ package core
 
 import (
 	"hash/fnv"
+	"log"
 )
 
 // MockSource and MockSink used for testing

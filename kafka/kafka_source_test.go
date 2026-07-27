@@ -2,6 +2,7 @@ package kafka
 
 import (
 	"hash/fnv"
+	"log"
 	"testing"
 
 	"github.com/Shopify/sarama"
