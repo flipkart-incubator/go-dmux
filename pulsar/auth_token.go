@@ -4,8 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
+	"os"
 	"net/url"
 	"strings"
 	"time"
@@ -150,7 +151,7 @@ func (p *authTokenProvider) fetchToken() (string, time.Duration, error) {
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", 0, fmt.Errorf("machine_identity: read token response: %w", err)
 	}
@@ -175,7 +176,7 @@ func (p *authTokenProvider) fetchToken() (string, time.Duration, error) {
 }
 
 func (p *authTokenProvider) readSubjectToken() (string, error) {
-	b, err := ioutil.ReadFile(p.subjectTokenPath)
+	b, err := os.ReadFile(p.subjectTokenPath)
 	if err != nil {
 		return "", fmt.Errorf("machine_identity: read subject token at %s: %w",
 			p.subjectTokenPath, err)

@@ -3,7 +3,6 @@ package config
 import (
 	"encoding/json"
 	sideline_models "github.com/flipkart-incubator/go-dmux/sideline"
-	"io/ioutil"
 	"log"
 	"os"
 
@@ -102,15 +101,15 @@ type DmuxConf struct {
 // DmuxItem struct defines name and type of connection
 type DmuxItem struct {
 	Name           string         `json:"name"`
-	Disabled       bool           `json:"disabled`
+	Disabled       bool           `json:"disabled"`
 	ConnType       ConnectionType `json:"connectionType"`
-	Connection     interface{}    `json:connection`
+	Connection     interface{}    `json:"connection"`
 	SidelineEnable bool           `json:"sidelineEnable"`
 }
 
 // GetDmuxConf parses Config file and return DmuxConf
 func (s DMuxConfigSetting) GetDmuxConf() DmuxConf {
-	raw, err := ioutil.ReadFile(s.FilePath)
+	raw, err := os.ReadFile(s.FilePath)
 	if err != nil {
 		log.Println(err.Error())
 		os.Exit(1)

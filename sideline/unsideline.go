@@ -3,8 +3,8 @@ package sideline
 import (
 	"encoding/json"
 	"github.com/gorilla/mux"
-	"io/ioutil"
 	"log"
+	"os"
 	"net/http"
 	"strconv"
 )
@@ -52,7 +52,7 @@ func healthCheck(w http.ResponseWriter, r *http.Request) {
 func UnsidelineStart(scanImplArg Scan, unsidelineImplArg Unsideline, configPath string) {
 	log.Println("Hi starting the API")
 
-	raw, err := ioutil.ReadFile(configPath)
+	raw, err := os.ReadFile(configPath)
 	if err != nil {
 		log.Fatal(err.Error())
 	}

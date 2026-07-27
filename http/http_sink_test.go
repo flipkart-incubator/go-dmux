@@ -3,7 +3,6 @@ package http
 import (
 	"encoding/json"
 	"hash/fnv"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -96,7 +95,7 @@ func GetFileSource(path string) *FileSource {
 
 func (f *FileSource) Generate(out chan<- interface{}) {
 
-	ordersBytes, err := ioutil.ReadFile(f.inputFilePath)
+	ordersBytes, err := os.ReadFile(f.inputFilePath)
 	if err != nil {
 		log.Fatalf("Failed to read file %s, %v", f.inputFilePath, err)
 		return
@@ -117,7 +116,7 @@ func (f *FileSource) Stop() {
 
 func parseConf(path string) HTTPSinkConf {
 
-	raw, err := ioutil.ReadFile(path)
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		log.Println(err.Error())
 		os.Exit(1)

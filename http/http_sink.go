@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"io"
-	"io/ioutil"
 	"log"
 	"math"
 	"net"
@@ -334,7 +333,7 @@ func (h *HTTPSink) execute(method, url string, headers map[string]string,
 		return false, 0
 	}
 	//TODO check if this can be avoided
-	io.Copy(ioutil.Discard, response.Body)
+	io.Copy(io.Discard, response.Body)
 	defer response.Body.Close()
 
 	return true, response.StatusCode
