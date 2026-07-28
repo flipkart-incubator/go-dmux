@@ -1,9 +1,9 @@
 package pulsar
 
 import (
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -16,7 +16,7 @@ func writeSubjectToken(t *testing.T, contents string) string {
 	t.Helper()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "token")
-	if err := ioutil.WriteFile(path, []byte(contents), 0600); err != nil {
+	if err := os.WriteFile(path, []byte(contents), 0600); err != nil {
 		t.Fatalf("failed to write subject token file: %v", err)
 	}
 	return path

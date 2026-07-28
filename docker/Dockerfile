@@ -1,32 +1,22 @@
-FROM golang:1.12-stretch as build
+FROM golang:1.26-bookworm AS build
 
 WORKDIR /app
 
-RUN apt-get update \
- && apt-get install -y ca-certificates  \
- && apt-get install apt-transport-https -y \
- && update-ca-certificates
-
 COPY . .
-
-RUN git config --global http.sslverify false
 
 RUN go build -o bin/go-dmux
 
-FROM golang:1.12-stretch as deploy
+FROM debian:bookworm-slim AS deploy
 
-ENV user "go-dmux"
-ENV group "go-dmux"
-ENV UID 3119
-ENV GID 3000
+ENV user="go-dmux"
+ENV group="go-dmux"
+ENV UID=3119
+ENV GID=3000
 
 RUN apt-get update && \
-    apt-get install -y procps && \
-    apt-get install -y ngrep && \
-    apt-get install netcat -y
-
-RUN apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    apt-get install -y procps ca-certificates netcat-openbsd && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
