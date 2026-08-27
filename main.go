@@ -5,7 +5,8 @@ import (
 	"github.com/flipkart-incubator/go-dmux/metrics"
 	"log"
 	"os"
-
+    "net/http"
+     _ "net/http/pprof"
 	"github.com/flipkart-incubator/go-dmux/logging"
 )
 
@@ -41,6 +42,10 @@ func main() {
 			connType.Start(connConf, logDebug, nil)
 		}(item.ConnType, item.Connection, dmuxLogging.EnableDebug)
 	}
+
+	go func() {
+    	log.Println(http.ListenAndServe("localhost:8081", nil))
+    }()
 
 	//main thread halts. TODO make changes to listen to kill and reboot
 	select {}
