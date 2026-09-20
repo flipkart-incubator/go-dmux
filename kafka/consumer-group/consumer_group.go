@@ -3,13 +3,14 @@ package consumergroup
 import (
 	"errors"
 	"fmt"
-	"github.com/Shopify/sarama"
-	"github.com/flipkart-incubator/go-dmux/metrics"
+	"log"
 	"strconv"
 	"sync"
 	"time"
 
+	"github.com/Shopify/sarama"
 	"github.com/flipkart-incubator/go-dmux/kafka/kazoo-go"
+	"github.com/flipkart-incubator/go-dmux/metrics"
 )
 
 var (
@@ -121,6 +122,7 @@ func JoinConsumerGroup(name string, topics []string, zookeeper []string, config 
 		kz.Close()
 		return
 	}
+	log.Printf("kafka brokers resolved from zookeeper: %v\n", brokers)
 
 	group := kz.Consumergroup(name)
 
